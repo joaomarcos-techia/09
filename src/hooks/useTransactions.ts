@@ -85,6 +85,14 @@ export function useTransactions() {
 
   const createDefaultCategories = async () => {
     try {
+      // First, get existing categories for the user
+      const { data: existingCategories, error: fetchError } = await supabase
+        .from('categories')
+        .select('name, type')
+        .eq('user_id', user!.id)
+
+      if (fetchError) throw fetchError
+
       const defaultCategories = [
         // Receitas
         { name: 'Vendas', type: 'income', color: '#10B981', is_default: true },
@@ -100,19 +108,40 @@ export function useTransactions() {
         { name: 'Outros', type: 'expense', color: '#7F1D1D', is_default: true }
       ]
 
-      const { data, error } = await supabase
-        .from('categories')
-        .insert(
-          defaultCategories.map(cat => ({
-            ...cat,
-            user_id: user!.id
-          }))
-        )
-        .select()
+      // Filter out categories that already exist
+      const existingCategoryKeys = new Set(
+        (existingCategories || []).map(cat => `${cat.name}-${cat.type}`)
+      )
 
-      if (error) throw error
-      if (data) {
-        setCategories(data)
+      const categoriesToInsert = defaultCategories.filter(cat => 
+        !existingCategoryKeys.has(`${cat.name}-${cat.type}`)
+      )
+
+      // Only insert if there are new categories to add
+      if (categoriesToInsert.length > 0) {
+        const { data, error } = await supabase
+          .from('categories')
+          .insert(
+            categoriesToInsert.map(cat => ({
+              ...cat,
+              user_id: user!.id
+            }))
+          )
+          .select()
+
+        if (error) throw error
+      }
+
+      // Fetch all categories again to ensure state is synchronized
+      const { data: allCategories, error: refetchError } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user!.id)
+        .order('name')
+
+      if (refetchError) throw refetchError
+      if (allCategories) {
+        setCategories(allCategories)
       }
     } catch (err) {
       console.error('Error creating default categories:', err)
