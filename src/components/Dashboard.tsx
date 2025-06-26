@@ -34,7 +34,8 @@ import {
   Database,
   Save,
   Check,
-  Brain
+  Brain,
+  Lightbulb
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLeads } from '../hooks/useLeads'
