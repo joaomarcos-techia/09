@@ -24,9 +24,11 @@ import {
   Tag,
   Building,
   Repeat,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react'
 import { useTransactions } from '../../hooks/useTransactions'
+import { PDFGenerator } from '../../utils/pdfGenerator'
 
 interface CoreFinanceProps {
   onBack: () => void
@@ -41,7 +43,7 @@ interface CalendarDay {
 }
 
 export function CoreFinance({ onBack }: CoreFinanceProps) {
-  const { transactions, accounts, categories, loading, createTransaction } = useTransactions()
+  const { transactions, accounts, categories, loading, createTransaction, error } = useTransactions()
   const [activeView, setActiveView] = useState<'dashboard' | 'calendar' | 'transactions' | 'reports'>('dashboard')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -51,6 +53,7 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
 
   const [formData, setFormData] = useState({
     type: 'income' as const,
@@ -62,6 +65,22 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
     is_recurring: false,
     recurring_interval: 'monthly'
   })
+
+  // Set default account and category when they become available
+  useEffect(() => {
+    if (accounts.length > 0 && !formData.account_id) {
+      setFormData(prev => ({ ...prev, account_id: accounts[0].id }))
+    }
+  }, [accounts, formData.account_id])
+
+  useEffect(() => {
+    if (categories.length > 0 && !formData.category_id) {
+      const defaultCategory = categories.find(cat => cat.type === formData.type && cat.is_default)
+      if (defaultCategory) {
+        setFormData(prev => ({ ...prev, category_id: defaultCategory.id }))
+      }
+    }
+  }, [categories, formData.type, formData.category_id])
 
   const filteredTransactions = transactions.filter(transaction => {
     const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -97,20 +116,30 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!formData.account_id) {
+      alert('Por favor, selecione uma conta')
+      return
+    }
+    
     const transactionData = {
       ...formData,
       amount: parseFloat(formData.amount),
       category_id: formData.category_id || null
     }
 
-    await createTransaction(transactionData)
+    const result = await createTransaction(transactionData)
+    
+    if (result.error) {
+      alert(`Erro ao criar transação: ${result.error}`)
+      return
+    }
 
     setFormData({
       type: 'income',
       amount: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      account_id: '',
+      account_id: accounts.length > 0 ? accounts[0].id : '',
       category_id: '',
       is_recurring: false,
       recurring_interval: 'monthly'
@@ -190,25 +219,83 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
   }
 
-  const generatePDFReport = () => {
-    // Simular geração de PDF
-    const reportData = {
-      period: `${currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
-      totalIncome: monthlyIncome,
-      totalExpenses: monthlyExpenses,
-      balance: monthlyBalance,
-      transactions: currentMonthTransactions,
-      categories: categories,
-      accounts: accounts
-    }
+  const generatePDFReport = async (reportType: 'monthly' | 'expenses' | 'cashflow') => {
+    setGeneratingPDF(true)
+    
+    try {
+      const reportData = {
+        period: currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        totalIncome: monthlyIncome,
+        totalExpenses: monthlyExpenses,
+        balance: monthlyBalance,
+        transactions: currentMonthTransactions,
+        categories: categories,
+        accounts: accounts
+      }
 
-    // Em uma implementação real, você usaria uma biblioteca como jsPDF
-    console.log('Gerando relatório PDF:', reportData)
-    alert('Relatório PDF gerado com sucesso! (Funcionalidade simulada)')
+      const pdfGenerator = new PDFGenerator()
+      
+      switch (reportType) {
+        case 'monthly':
+          pdfGenerator.generateMonthlyReport(reportData)
+          break
+        case 'expenses':
+          pdfGenerator.generateExpenseAnalysis(reportData)
+          break
+        case 'cashflow':
+          pdfGenerator.generateCashFlow(reportData)
+          break
+      }
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error)
+      alert('Erro ao gerar relatório PDF. Tente novamente.')
+    } finally {
+      setGeneratingPDF(false)
+    }
   }
 
   const handleBackToLanding = () => {
     window.location.href = '/'
+  }
+
+  // Show error if there's a database connection issue
+  if (error && error.includes('does not exist')) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-sm p-8 text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertCircle size={40} className="text-red-600" />
+          </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Banco de Dados Não Configurado
+          </h1>
+          
+          <p className="text-gray-600 mb-8">
+            As tabelas financeiras não foram criadas ainda. Execute a migração do banco de dados para usar o CoreFinance.
+          </p>
+
+          <div className="space-y-4">
+            <button
+              onClick={onBack}
+              className="w-full bg-gray-600 text-white py-3 rounded-xl hover:bg-gray-700 transition-colors font-medium"
+            >
+              Voltar ao Dashboard
+            </button>
+          </div>
+
+          <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+            <div className="flex items-center justify-center mb-2">
+              <AlertCircle className="text-yellow-600 mr-2" size={20} />
+              <span className="text-yellow-800 font-medium">Como resolver</span>
+            </div>
+            <p className="text-yellow-700 text-sm">
+              Acesse o painel do Supabase e execute a migração do arquivo <code className="bg-yellow-100 px-1 rounded">supabase/migrations/20250617051145_bold_valley.sql</code>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (showCreateForm) {
@@ -226,7 +313,7 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                       amount: '',
                       description: '',
                       date: new Date().toISOString().split('T')[0],
-                      account_id: '',
+                      account_id: accounts.length > 0 ? accounts[0].id : '',
                       category_id: '',
                       is_recurring: false,
                       recurring_interval: 'monthly'
@@ -259,7 +346,17 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                 </label>
                 <select
                   value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                  onChange={(e) => {
+                    const newType = e.target.value as 'income' | 'expense'
+                    // Ao mudar o tipo, encontrar uma categoria padrão do novo tipo
+                    const defaultCategory = categories.find(cat => cat.type === newType && cat.is_default)
+                    
+                    setFormData({ 
+                      ...formData, 
+                      type: newType,
+                      category_id: defaultCategory?.id || ''
+                    })
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 >
@@ -327,6 +424,11 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                     </option>
                   ))}
                 </select>
+                {accounts.length === 0 && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Nenhuma conta disponível. Recarregue a página para criar uma conta padrão.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -348,6 +450,11 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                     </option>
                   ))}
               </select>
+              {categories.filter(cat => cat.type === formData.type).length === 0 && (
+                <p className="text-red-500 text-sm mt-1">
+                  Nenhuma categoria disponível. Recarregue a página para criar categorias padrão.
+                </p>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -600,7 +707,7 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                           <div>
                             <p className="font-medium text-gray-900">{transaction.description}</p>
                             <p className="text-sm text-gray-600">
-                              {category?.name} • {account?.name}
+                              {category?.name || 'Sem categoria'} • {account?.name || 'Conta não encontrada'}
                             </p>
                           </div>
                         </div>
@@ -617,6 +724,19 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                       </div>
                     )
                   })}
+
+                  {transactions.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <DollarSign size={32} className="mx-auto mb-2 opacity-50" />
+                      <p>Nenhuma transação registrada</p>
+                      <button
+                        onClick={() => setShowCreateForm(true)}
+                        className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm"
+                      >
+                        Adicionar Transação
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -654,6 +774,23 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                       )
                     })
                     .filter(Boolean)}
+
+                  {categories.filter(cat => cat.type === 'expense').length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Tag size={32} className="mx-auto mb-2 opacity-50" />
+                      <p>Nenhuma categoria de despesa</p>
+                    </div>
+                  )}
+
+                  {categories.filter(cat => cat.type === 'expense').length > 0 && 
+                   !categories.filter(cat => cat.type === 'expense').some(cat => 
+                     currentMonthTransactions.some(t => t.category_id === cat.id && t.type === 'expense')
+                   ) && (
+                    <div className="text-center py-8 text-gray-500">
+                      <PieChart size={32} className="mx-auto mb-2 opacity-50" />
+                      <p>Nenhuma despesa registrada neste mês</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -751,7 +888,7 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                         <div>
                           <p className="font-medium text-gray-900">{transaction.description}</p>
                           <p className="text-sm text-gray-600">
-                            {category?.name} • {account?.name}
+                            {category?.name || 'Sem categoria'} • {account?.name || 'Conta não encontrada'}
                           </p>
                         </div>
                         <p className={`font-semibold ${
@@ -1078,11 +1215,21 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                   Visualizar
                 </button>
                 <button
-                  onClick={generatePDFReport}
-                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center"
+                  onClick={() => generatePDFReport('monthly')}
+                  disabled={generatingPDF}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center disabled:opacity-50"
                 >
-                  <Download size={16} className="mr-2" />
-                  Gerar PDF
+                  {generatingPDF ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} className="mr-2" />
+                      Gerar PDF
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1098,10 +1245,18 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                   Resumo completo das movimentações do mês atual
                 </p>
                 <button
-                  onClick={generatePDFReport}
-                  className="w-full bg-orange-100 text-orange-700 py-2 rounded-lg hover:bg-orange-200"
+                  onClick={() => generatePDFReport('monthly')}
+                  disabled={generatingPDF}
+                  className="w-full bg-orange-100 text-orange-700 py-2 rounded-lg hover:bg-orange-200 disabled:opacity-50 flex items-center justify-center"
                 >
-                  Gerar Relatório
+                  {generatingPDF ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-orange-700 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Gerando...
+                    </>
+                  ) : (
+                    'Gerar Relatório'
+                  )}
                 </button>
               </div>
 
@@ -1113,8 +1268,19 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                 <p className="text-sm text-gray-600 mb-4">
                   Breakdown detalhado dos gastos por categoria
                 </p>
-                <button className="w-full bg-blue-100 text-blue-700 py-2 rounded-lg hover:bg-blue-200">
-                  Gerar Análise
+                <button 
+                  onClick={() => generatePDFReport('expenses')}
+                  disabled={generatingPDF}
+                  className="w-full bg-blue-100 text-blue-700 py-2 rounded-lg hover:bg-blue-200 disabled:opacity-50 flex items-center justify-center"
+                >
+                  {generatingPDF ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Gerando...
+                    </>
+                  ) : (
+                    'Gerar Análise'
+                  )}
                 </button>
               </div>
 
@@ -1126,8 +1292,19 @@ export function CoreFinance({ onBack }: CoreFinanceProps) {
                 <p className="text-sm text-gray-600 mb-4">
                   Projeção e histórico do fluxo de caixa
                 </p>
-                <button className="w-full bg-green-100 text-green-700 py-2 rounded-lg hover:bg-green-200">
-                  Gerar Fluxo
+                <button 
+                  onClick={() => generatePDFReport('cashflow')}
+                  disabled={generatingPDF}
+                  className="w-full bg-green-100 text-green-700 py-2 rounded-lg hover:bg-green-200 disabled:opacity-50 flex items-center justify-center"
+                >
+                  {generatingPDF ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-green-700 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Gerando...
+                    </>
+                  ) : (
+                    'Gerar Fluxo'
+                  )}
                 </button>
               </div>
             </div>
