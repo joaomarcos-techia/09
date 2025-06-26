@@ -41,7 +41,12 @@ function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Remove the automatic redirect - let users stay on landing page if they want
+  // Redirecionar usuário logado para o dashboard
+  useEffect(() => {
+    if (user) {
+      window.location.href = '/dashboard';
+    }
+  }, [user]);
 
   const saasProducts = [
     {
