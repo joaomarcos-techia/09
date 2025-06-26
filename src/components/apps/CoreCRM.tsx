@@ -25,7 +25,9 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  Columns,
+  List
 } from 'lucide-react'
 import { useLeads } from '../../hooks/useLeads'
 import { useIntegrations } from '../../hooks/useIntegrations'
@@ -49,7 +51,7 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
   const { leads, loading, createLead, updateLead, deleteLead } = useLeads()
   const { integrations, getIntegrationByService } = useIntegrations()
   
-  const [activeView, setActiveView] = useState<'contacts' | 'messages' | 'integrations'>('contacts')
+  const [activeView, setActiveView] = useState<'contacts' | 'kanban' | 'messages' | 'integrations'>('contacts')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedLead, setSelectedLead] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -210,12 +212,18 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
     e.dataTransfer.dropEffect = 'move'
   }
 
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetIndex?: number, newStatus?: string) => {
     e.preventDefault()
     if (!draggedLead) return
 
-    // Aqui você implementaria a lógica de reordenação
-    console.log('Reordenando lead:', draggedLead.name, 'para posição:', targetIndex)
+    if (newStatus && draggedLead.status !== newStatus) {
+      // Atualizar status do lead no KanBan
+      updateLead(draggedLead.id, { status: newStatus })
+    } else if (targetIndex !== undefined) {
+      // Reordenação na lista de contatos
+      console.log('Reordenando lead:', draggedLead.name, 'para posição:', targetIndex)
+    }
+    
     setDraggedLead(null)
   }
 
@@ -238,13 +246,13 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
   }
 
   const statusColors = {
-    new: 'bg-blue-100 text-blue-800',
-    contacted: 'bg-yellow-100 text-yellow-800',
-    qualified: 'bg-green-100 text-green-800',
-    proposal: 'bg-purple-100 text-purple-800',
-    negotiation: 'bg-orange-100 text-orange-800',
-    won: 'bg-green-100 text-green-800',
-    lost: 'bg-red-100 text-red-800'
+    new: 'bg-blue-100 text-blue-800 border-blue-200',
+    contacted: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    qualified: 'bg-green-100 text-green-800 border-green-200',
+    proposal: 'bg-purple-100 text-purple-800 border-purple-200',
+    negotiation: 'bg-orange-100 text-orange-800 border-orange-200',
+    won: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    lost: 'bg-red-100 text-red-800 border-red-200'
   }
 
   const statusLabels = {
@@ -255,6 +263,20 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
     negotiation: 'Negociação',
     won: 'Ganho',
     lost: 'Perdido'
+  }
+
+  const kanbanColumns = [
+    { status: 'new', label: 'Novos Leads', color: 'border-blue-500' },
+    { status: 'contacted', label: 'Contatados', color: 'border-yellow-500' },
+    { status: 'qualified', label: 'Qualificados', color: 'border-green-500' },
+    { status: 'proposal', label: 'Proposta Enviada', color: 'border-purple-500' },
+    { status: 'negotiation', label: 'Em Negociação', color: 'border-orange-500' },
+    { status: 'won', label: 'Fechados', color: 'border-emerald-500' },
+    { status: 'lost', label: 'Perdidos', color: 'border-red-500' }
+  ]
+
+  const getLeadsByStatus = (status: string) => {
+    return filteredLeads.filter(lead => lead.status === status)
   }
 
   if (showCreateForm) {
@@ -443,7 +465,7 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
             </div>
             
             <div className="flex items-center space-x-4">
-              {activeView === 'contacts' && (
+              {(activeView === 'contacts' || activeView === 'kanban') && (
                 <button
                   onClick={() => setShowCreateForm(true)}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
@@ -478,8 +500,21 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
               }`}
             >
               <div className="flex items-center">
-                <Users size={16} className="mr-2" />
-                Contatos ({filteredLeads.length})
+                <List size={16} className="mr-2" />
+                Lista ({filteredLeads.length})
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveView('kanban')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeView === 'kanban'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center">
+                <Columns size={16} className="mr-2" />
+                KanBan ({filteredLeads.length})
               </div>
             </button>
             <button
@@ -513,43 +548,44 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filters - Mostrar apenas para contacts e kanban */}
+        {(activeView === 'contacts' || activeView === 'kanban') && (
+          <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Buscar contatos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">Todos os Status</option>
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="text-sm text-gray-600">
+                {filteredLeads.length} contato(s) encontrado(s)
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Contacts View */}
         {activeView === 'contacts' && (
           <>
-            {/* Filters */}
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-                <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                    <input
-                      type="text"
-                      placeholder="Buscar contatos..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">Todos os Status</option>
-                    {Object.entries(statusLabels).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  {filteredLeads.length} contato(s) encontrado(s)
-                </div>
-              </div>
-            </div>
-
-            {/* Contacts List */}
             {loading ? (
               <div className="bg-white rounded-xl shadow-sm p-8 text-center">
                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -683,6 +719,126 @@ export function CoreCRM({ onBack }: CoreCRMProps) {
               </div>
             )}
           </>
+        )}
+
+        {/* KanBan View */}
+        {activeView === 'kanban' && (
+          <div className="overflow-x-auto">
+            <div className="flex space-x-6 min-w-max pb-6">
+              {kanbanColumns.map((column) => {
+                const columnLeads = getLeadsByStatus(column.status)
+                
+                return (
+                  <div
+                    key={column.status}
+                    className={`bg-white rounded-xl shadow-sm border-t-4 ${column.color} min-w-80 max-w-80`}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, undefined, column.status)}
+                  >
+                    {/* Column Header */}
+                    <div className="p-4 border-b">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">{column.label}</h3>
+                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
+                          {columnLeads.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Column Content */}
+                    <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
+                      {columnLeads.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <Users size={32} className="mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Nenhum lead nesta fase</p>
+                        </div>
+                      ) : (
+                        columnLeads.map((lead) => {
+                          const unreadCount = getUnreadCount(lead.id)
+                          
+                          return (
+                            <div
+                              key={lead.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, lead)}
+                              className="bg-gray-50 rounded-lg p-4 cursor-move hover:shadow-md transition-all duration-200 border border-gray-200"
+                            >
+                              <div className="flex items-start justify-between mb-3">
+                                <h4 className="font-medium text-gray-900 text-sm">{lead.name}</h4>
+                                {unreadCount > 0 && (
+                                  <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
+                                    {unreadCount}
+                                  </span>
+                                )}
+                              </div>
+
+                              {lead.company && (
+                                <p className="text-xs text-gray-600 mb-2 flex items-center">
+                                  <Building size={12} className="mr-1" />
+                                  {lead.company}
+                                </p>
+                              )}
+
+                              {lead.value && (
+                                <p className="text-xs text-green-600 font-medium mb-3 flex items-center">
+                                  <DollarSign size={12} className="mr-1" />
+                                  R$ {lead.value.toLocaleString('pt-BR')}
+                                </p>
+                              )}
+
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  {lead.email && (
+                                    <button
+                                      onClick={() => handleEmailClick(lead.email)}
+                                      className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                                      title="Enviar email"
+                                    >
+                                      <Mail size={12} />
+                                    </button>
+                                  )}
+                                  {lead.whatsapp && (
+                                    <button
+                                      onClick={() => handleWhatsAppClick(lead.whatsapp)}
+                                      className="p-1 text-gray-400 hover:text-green-600 rounded"
+                                      title="Abrir WhatsApp"
+                                    >
+                                      <MessageCircle size={12} />
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center space-x-1">
+                                  <button
+                                    onClick={() => handleEdit(lead)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                                    title="Editar"
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(lead.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600 rounded"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 text-xs text-gray-500">
+                                {new Date(lead.created_at).toLocaleDateString('pt-BR')}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         {/* Messages View */}
