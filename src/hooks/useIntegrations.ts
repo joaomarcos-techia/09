@@ -97,13 +97,8 @@ export function useIntegrations() {
     }
   }
 
-  const testIntegration = async (service: string) => {
+  const testIntegration = async (service: string, config: any) => {
     try {
-      const integration = integrations.find(i => i.service === service)
-      if (!integration) {
-        throw new Error('Integration not found')
-      }
-
       // Fazer teste real através de edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-integration`, {
         method: 'POST',
@@ -113,7 +108,7 @@ export function useIntegrations() {
         },
         body: JSON.stringify({
           service,
-          config: integration.config
+          config
         })
       })
 
@@ -123,7 +118,7 @@ export function useIntegrations() {
         throw new Error(result.error || 'Test failed')
       }
 
-      return { success: true, result }
+      return result
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Test failed'
       return { success: false, error: errorMessage }

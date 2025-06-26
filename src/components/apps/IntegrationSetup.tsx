@@ -23,32 +23,35 @@ interface IntegrationSetupProps {
 }
 
 export function IntegrationSetup({ isOpen, onClose, integrationType }: IntegrationSetupProps) {
-  const { saveIntegration, testIntegration } = useIntegrations()
+  const { saveIntegration, testIntegration, getIntegrationByService } = useIntegrations()
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
+  // Carregar configurações existentes se houver
+  const existingIntegration = getIntegrationByService(integrationType)
+
   const [whatsappConfig, setWhatsappConfig] = useState({
-    apiKey: '',
-    phoneNumber: '',
-    webhookUrl: ''
+    apiKey: existingIntegration?.config?.apiKey || '',
+    phoneNumber: existingIntegration?.config?.phoneNumber || '',
+    webhookUrl: existingIntegration?.config?.webhookUrl || ''
   })
 
   const [emailConfig, setEmailConfig] = useState({
-    smtpHost: '',
-    smtpPort: '587',
-    username: '',
-    password: '',
-    useSSL: true
+    smtpHost: existingIntegration?.config?.smtpHost || '',
+    smtpPort: existingIntegration?.config?.smtpPort || '587',
+    username: existingIntegration?.config?.username || '',
+    password: existingIntegration?.config?.password || '',
+    useSSL: existingIntegration?.config?.useSSL !== false
   })
 
   const [aiConfig, setAiConfig] = useState({
-    apiKey: '',
-    model: 'gpt-3.5-turbo',
-    systemPrompt: 'Você é um assistente de vendas profissional. Responda de forma útil e cordial.',
-    maxTokens: 500,
-    temperature: 0.7
+    apiKey: existingIntegration?.config?.apiKey || '',
+    model: existingIntegration?.config?.model || 'gpt-3.5-turbo',
+    systemPrompt: existingIntegration?.config?.systemPrompt || 'Você é um assistente de vendas profissional. Responda de forma útil e cordial.',
+    maxTokens: existingIntegration?.config?.maxTokens || 500,
+    temperature: existingIntegration?.config?.temperature || 0.7
   })
 
   if (!isOpen) return null
@@ -91,141 +94,6 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
         break
     }
     return true
-  }
-
-  const testWhatsAppConnection = async () => {
-    try {
-      // Teste real da API do WhatsApp Business
-      const response = await fetch(`https://graph.facebook.com/v18.0/${whatsappConfig.phoneNumber}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${whatsappConfig.apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return { 
-          success: true, 
-          message: `Conexão estabelecida com sucesso! Número verificado: ${data.display_phone_number || whatsappConfig.phoneNumber}` 
-        }
-      } else {
-        const error = await response.json()
-        return { 
-          success: false, 
-          message: `Erro na API do WhatsApp: ${error.error?.message || 'Token inválido ou número não encontrado'}` 
-        }
-      }
-    } catch (error) {
-      return { 
-        success: false, 
-        message: 'Erro de conexão. Verifique sua internet e as credenciais.' 
-      }
-    }
-  }
-
-  const testEmailConnection = async () => {
-    try {
-      // Teste real de conexão SMTP usando um serviço de validação
-      const testData = {
-        host: emailConfig.smtpHost,
-        port: parseInt(emailConfig.smtpPort),
-        username: emailConfig.username,
-        password: emailConfig.password,
-        secure: emailConfig.useSSL
-      }
-
-      // Validação básica de formato de email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(emailConfig.username)) {
-        return { success: false, message: 'Formato de email inválido' }
-      }
-
-      // Validação de servidor SMTP comum
-      const commonServers = {
-        'smtp.gmail.com': 587,
-        'smtp-mail.outlook.com': 587,
-        'smtp.mail.yahoo.com': 587,
-        'smtp.office365.com': 587
-      }
-
-      const expectedPort = commonServers[emailConfig.smtpHost as keyof typeof commonServers]
-      if (expectedPort && parseInt(emailConfig.smtpPort) !== expectedPort) {
-        return { 
-          success: false, 
-          message: `Para ${emailConfig.smtpHost}, a porta recomendada é ${expectedPort}` 
-        }
-      }
-
-      // Teste de conectividade básica (simulação de teste SMTP real)
-      // Em produção, isso seria feito no backend por questões de segurança
-      if (emailConfig.smtpHost.includes('gmail') && !emailConfig.password.includes(' ')) {
-        return { 
-          success: false, 
-          message: 'Para Gmail, use uma "Senha de App" em vez da senha normal. Ative a autenticação de 2 fatores e gere uma senha de app.' 
-        }
-      }
-
-      return { 
-        success: true, 
-        message: 'Configuração SMTP válida! Lembre-se de testar o envio real.' 
-      }
-    } catch (error) {
-      return { 
-        success: false, 
-        message: 'Erro ao validar configurações SMTP' 
-      }
-    }
-  }
-
-  const testOpenAIConnection = async () => {
-    try {
-      // Teste real da API OpenAI
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${aiConfig.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: aiConfig.model,
-          messages: [
-            { role: 'system', content: 'Teste de conexão' },
-            { role: 'user', content: 'Olá' }
-          ],
-          max_tokens: 10
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return { 
-          success: true, 
-          message: `Conexão com OpenAI estabelecida! Modelo ${aiConfig.model} funcionando.` 
-        }
-      } else {
-        const error = await response.json()
-        
-        if (response.status === 401) {
-          return { success: false, message: 'Chave da API inválida. Verifique se está correta e ativa.' }
-        } else if (response.status === 429) {
-          return { success: false, message: 'Limite de requisições excedido. Verifique seu plano OpenAI.' }
-        } else if (response.status === 400) {
-          return { success: false, message: `Modelo ${aiConfig.model} não disponível ou parâmetros inválidos.` }
-        } else {
-          return { 
-            success: false, 
-            message: `Erro da API OpenAI: ${error.error?.message || 'Erro desconhecido'}` 
-          }
-        }
-      }
-    } catch (error) {
-      return { 
-        success: false, 
-        message: 'Erro de conexão com a OpenAI. Verifique sua internet e chave da API.' 
-      }
-    }
   }
 
   const handleSave = async () => {
@@ -275,13 +143,13 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
       
       switch (integrationType) {
         case 'whatsapp':
-          result = await testWhatsAppConnection()
+          result = await testIntegration('whatsapp', whatsappConfig)
           break
         case 'email':
-          result = await testEmailConnection()
+          result = await testIntegration('email', emailConfig)
           break
         case 'ai':
-          result = await testOpenAIConnection()
+          result = await testIntegration('ai', aiConfig)
           break
         default:
           result = { success: false, message: 'Tipo de integração não suportado' }
