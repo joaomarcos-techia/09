@@ -69,6 +69,46 @@ export function useInsights() {
     }
   }
 
+  const createInsight = async (insightData: Omit<Insight, 'id' | 'user_id' | 'created_at' | 'is_read' | 'is_applied'>) => {
+    try {
+      const { data, error } = await supabase
+        .from('insights')
+        .insert([{ 
+          ...insightData, 
+          user_id: user!.id,
+          is_read: false,
+          is_applied: false
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+      setInsights(prev => [data, ...prev])
+      return { data, error: null }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Error creating insight'
+      setError(errorMessage)
+      return { data: null, error: errorMessage }
+    }
+  }
+
+  const deleteInsight = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('insights')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      setInsights(prev => prev.filter(insight => insight.id !== id))
+      return { error: null }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Error deleting insight'
+      setError(errorMessage)
+      return { error: errorMessage }
+    }
+  }
+
   const getInsightStats = () => {
     const total = insights.length
     const unread = insights.filter(i => !i.is_read).length
@@ -89,6 +129,8 @@ export function useInsights() {
     error,
     markAsRead,
     markAsApplied,
+    createInsight,
+    deleteInsight,
     refetch: fetchInsights,
     stats: getInsightStats()
   }

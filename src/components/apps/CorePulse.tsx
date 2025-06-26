@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   Activity, 
   Brain, 
@@ -13,106 +13,49 @@ import {
   Eye,
   ThumbsUp,
   Home,
+  MessageCircle,
+  Bot,
   Send,
   Loader2,
-  Settings,
-  Users,
-  DollarSign,
-  CheckSquare,
-  MessageCircle,
-  Download,
   RefreshCw,
-  FileText,
-  Calendar,
-  PieChart,
-  Bot,
+  Settings,
   X,
-  Globe,
-  Key,
-  Phone
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  Download,
+  FileText
 } from 'lucide-react'
 import { useInsights } from '../../hooks/useInsights'
 import { useAutomations } from '../../hooks/useAutomations'
-import { useLeads } from '../../hooks/useLeads'
-import { useTasks } from '../../hooks/useTasks'
-import { useTransactions } from '../../hooks/useTransactions'
 import { useIntegrations } from '../../hooks/useIntegrations'
+import { IntegrationSetup } from './IntegrationSetup'
 
 interface CorePulseProps {
   onBack: () => void
 }
 
-interface Message {
-  id: string
-  type: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  isLoading?: boolean
-  reportType?: 'monthly' | 'expense' | 'cashflow' | 'strategic'
-}
-
-interface BusinessData {
-  leads: {
-    total: number
-    qualified: number
-    won: number
-    conversionRate: number
-    avgValue: number
-    recentTrends: string[]
-  }
-  tasks: {
-    total: number
-    completed: number
-    overdue: number
-    completionRate: number
-    avgCompletionTime: number
-    productivityTrends: string[]
-  }
-  finance: {
-    totalRevenue: number
-    totalExpenses: number
-    netProfit: number
-    monthlyGrowth: number
-    cashFlow: number
-    financialTrends: string[]
-  }
-  insights: string[]
-  recommendations: string[]
-}
-
 export function CorePulse({ onBack }: CorePulseProps) {
   const { insights, loading: insightsLoading, markAsRead, markAsApplied } = useInsights()
   const { automations, loading: automationsLoading } = useAutomations()
-  const { leads, stats: leadStats } = useLeads()
-  const { tasks, stats: taskStats } = useTasks()
-  const { transactions, stats: financeStats } = useTransactions()
   const { getIntegrationByService } = useIntegrations()
   
-  const [selectedTab, setSelectedTab] = useState<'insights' | 'automations' | 'oracle'>('insights')
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputMessage, setInputMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [businessData, setBusinessData] = useState<BusinessData | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const [oracleSettings, setOracleSettings] = useState({
-    aiProvider: 'openai',
-    model: 'gpt-4',
-    apiKey: '',
-    systemPrompt: `Você é o CorePulse, um consultor estratégico inteligente especializado em análise de negócios. 
-
-Sua função é analisar dados de CRM, tarefas e finanças para fornecer:
-- Insights estratégicos baseados em dados
-- Recomendações para otimização de processos
-- Análises preditivas de tendências
-- Relatórios executivos detalhados
-
-Sempre responda de forma profissional, objetiva e focada em resultados práticos. Use dados específicos quando disponíveis e forneça recomendações acionáveis.`,
+  const [selectedTab, setSelectedTab] = useState<'insights' | 'automations' | 'assistant'>('insights')
+  const [showIntegrationSetup, setShowIntegrationSetup] = useState(false)
+  const [assistantMessage, setAssistantMessage] = useState('')
+  const [assistantResponse, setAssistantResponse] = useState<string | null>(null)
+  const [assistantHistory, setAssistantHistory] = useState<{role: 'user' | 'assistant', content: string}[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
+  const [assistantSettings, setAssistantSettings] = useState({
+    model: 'gpt-3.5-turbo',
     temperature: 0.7,
-    maxTokens: 1000,
-    analysisDepth: 'detailed'
+    maxTokens: 500,
+    systemPrompt: 'Você é o CorePulse, um consultor estratégico inteligente especializado em análise de negócios. Você deve fornecer insights úteis, análises preditivas e recomendações estratégicas baseadas nos dados da empresa. Seja profissional, objetivo e focado em resultados práticos.'
   })
+
+  const aiIntegration = getIntegrationByService('ai')
+  const aiConfigured = aiIntegration?.is_active || false
 
   const priorityColors = {
     1: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -138,98 +81,6 @@ Sempre responda de forma profissional, objetiva e focada em resultados práticos
     draft: 'Rascunho'
   }
 
-  useEffect(() => {
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem('coreoracle-settings')
-    if (savedSettings) {
-      try {
-        setOracleSettings(JSON.parse(savedSettings))
-      } catch (error) {
-        console.error('Error loading Oracle settings:', error)
-      }
-    }
-
-    // Load chat history
-    const savedMessages = localStorage.getItem('coreoracle-messages')
-    if (savedMessages) {
-      try {
-        const parsedMessages = JSON.parse(savedMessages)
-        setMessages(parsedMessages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        })))
-      } catch (error) {
-        console.error('Error loading chat history:', error)
-      }
-    }
-
-    // Initialize with welcome message if no history
-    if (!savedMessages) {
-      const welcomeMessage: Message = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `Olá! Sou o CorePulse, seu consultor estratégico inteligente. 
-
-Posso ajudá-lo com:
-📊 **Análises de Performance** - Métricas de vendas, produtividade e finanças
-🎯 **Insights Estratégicos** - Identificação de oportunidades e gargalos
-📈 **Previsões e Tendências** - Análise preditiva baseada em seus dados
-📋 **Relatórios Executivos** - Documentos detalhados para tomada de decisão
-
-Como posso ajudá-lo hoje?`,
-        timestamp: new Date()
-      }
-      setMessages([welcomeMessage])
-    }
-  }, [])
-
-  useEffect(() => {
-    // Scroll to bottom when new messages arrive
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  useEffect(() => {
-    // Save messages to localStorage
-    if (messages.length > 0) {
-      localStorage.setItem('coreoracle-messages', JSON.stringify(messages))
-    }
-  }, [messages])
-
-  useEffect(() => {
-    // Compile business data
-    if (leadStats && taskStats && financeStats) {
-      const data: BusinessData = {
-        leads: {
-          total: leadStats.total || 0,
-          qualified: leadStats.qualified || 0,
-          won: leadStats.won || 0,
-          conversionRate: parseFloat(leadStats.conversionRate?.replace('%', '') || '0'),
-          avgValue: leadStats.totalValue ? leadStats.totalValue / (leadStats.total || 1) : 0,
-          recentTrends: generateLeadTrends()
-        },
-        tasks: {
-          total: taskStats.total || 0,
-          completed: taskStats.completed || 0,
-          overdue: taskStats.overdue || 0,
-          completionRate: parseFloat(taskStats.completionRate?.replace('%', '') || '0'),
-          avgCompletionTime: 3.5, // Simulated
-          productivityTrends: generateTaskTrends()
-        },
-        finance: {
-          totalRevenue: financeStats.monthlyIncome || 0,
-          totalExpenses: financeStats.monthlyExpenses || 0,
-          netProfit: (financeStats.monthlyIncome || 0) - (financeStats.monthlyExpenses || 0),
-          monthlyGrowth: 12.5, // Simulated
-          cashFlow: financeStats.totalBalance || 0,
-          financialTrends: generateFinanceTrends()
-        },
-        insights: generateInsights(),
-        recommendations: generateRecommendations()
-      }
-      setBusinessData(data)
-    }
-  }, [leadStats, taskStats, financeStats])
-
   const handleMarkAsRead = async (insightId: string) => {
     await markAsRead(insightId)
   }
@@ -242,396 +93,65 @@ Como posso ajudá-lo hoje?`,
     window.location.href = '/'
   }
 
-  const generateLeadTrends = () => {
-    const trends = []
-    if (leadStats?.conversionRate) {
-      const rate = parseFloat(leadStats.conversionRate.replace('%', ''))
-      if (rate > 20) trends.push('Alta taxa de conversão detectada')
-      if (rate < 5) trends.push('Taxa de conversão abaixo da média')
-    }
-    if (leadStats?.qualified && leadStats?.total) {
-      const qualificationRate = (leadStats.qualified / leadStats.total) * 100
-      if (qualificationRate > 50) trends.push('Boa qualificação de leads')
-    }
-    return trends
-  }
-
-  const generateTaskTrends = () => {
-    const trends = []
-    if (taskStats?.completionRate) {
-      const rate = parseFloat(taskStats.completionRate.replace('%', ''))
-      if (rate > 80) trends.push('Alta produtividade da equipe')
-      if (rate < 50) trends.push('Produtividade abaixo do esperado')
-    }
-    if (taskStats?.overdue && taskStats?.overdue > 0) {
-      trends.push(`${taskStats.overdue} tarefas em atraso requerem atenção`)
-    }
-    return trends
-  }
-
-  const generateFinanceTrends = () => {
-    const trends = []
-    if (financeStats?.monthlyIncome && financeStats?.monthlyExpenses) {
-      const margin = ((financeStats.monthlyIncome - financeStats.monthlyExpenses) / financeStats.monthlyIncome) * 100
-      if (margin > 20) trends.push('Margem de lucro saudável')
-      if (margin < 10) trends.push('Margem de lucro baixa - revisar custos')
-    }
-    if (financeStats?.totalBalance && financeStats.totalBalance > 0) {
-      trends.push('Fluxo de caixa positivo')
-    }
-    return trends
-  }
-
-  const generateInsights = () => {
-    const insights = []
-    
-    if (leadStats?.conversionRate && taskStats?.completionRate) {
-      const leadRate = parseFloat(leadStats.conversionRate.replace('%', ''))
-      const taskRate = parseFloat(taskStats.completionRate.replace('%', ''))
-      
-      if (leadRate > 15 && taskRate > 75) {
-        insights.push('Correlação positiva entre produtividade da equipe e conversão de leads')
-      }
-    }
-
-    if (financeStats?.monthlyIncome && leadStats?.won) {
-      const revenuePerLead = financeStats.monthlyIncome / (leadStats.won || 1)
-      insights.push(`Receita média por lead convertido: R$ ${revenuePerLead.toLocaleString('pt-BR')}`)
-    }
-
-    return insights
-  }
-
-  const generateRecommendations = () => {
-    const recommendations = []
-    
-    if (taskStats?.overdue && taskStats.overdue > 0) {
-      recommendations.push('Implementar sistema de alertas para tarefas próximas do vencimento')
-    }
-
-    if (leadStats?.total && leadStats.qualified) {
-      const qualificationRate = (leadStats.qualified / leadStats.total) * 100
-      if (qualificationRate < 30) {
-        recommendations.push('Melhorar processo de qualificação de leads com critérios mais específicos')
-      }
-    }
-
-    if (financeStats?.monthlyExpenses && financeStats?.monthlyIncome) {
-      const expenseRatio = (financeStats.monthlyExpenses / financeStats.monthlyIncome) * 100
-      if (expenseRatio > 80) {
-        recommendations.push('Revisar e otimizar estrutura de custos operacionais')
-      }
-    }
-
-    return recommendations
-  }
-
-  const saveSettings = () => {
-    localStorage.setItem('coreoracle-settings', JSON.stringify(oracleSettings))
-    setShowSettings(false)
-  }
-
-  const generateAIResponse = async (userMessage: string): Promise<string> => {
-    // Check if AI integration is configured
-    const aiIntegration = getIntegrationByService('ai')
-    
-    if (!aiIntegration?.is_active && !oracleSettings.apiKey) {
-      return `Para usar o CorePulse com IA, você precisa configurar uma integração de IA primeiro. 
-
-Vá em **CoreCRM > Integrações > Assistente de IA** para configurar sua chave da OpenAI.
-
-Enquanto isso, posso fornecer análises baseadas nos seus dados atuais:
-
-${generateDataBasedResponse(userMessage)}`
-    }
-
-    try {
-      const apiKey = aiIntegration?.config?.apiKey || oracleSettings.apiKey
-      const model = aiIntegration?.config?.model || oracleSettings.model
-
-      const systemPrompt = `${oracleSettings.systemPrompt}
-
-DADOS ATUAIS DO NEGÓCIO:
-${businessData ? `
-Leads: ${businessData.leads.total} total, ${businessData.leads.won} convertidos (${businessData.leads.conversionRate}%)
-Tarefas: ${businessData.tasks.total} total, ${businessData.tasks.completed} concluídas (${businessData.tasks.completionRate}%)
-Finanças: R$ ${businessData.finance.totalRevenue.toLocaleString('pt-BR')} receita, R$ ${businessData.finance.totalExpenses.toLocaleString('pt-BR')} despesas
-Lucro Líquido: R$ ${businessData.finance.netProfit.toLocaleString('pt-BR')}
-
-Tendências Identificadas:
-${[...businessData.leads.recentTrends, ...businessData.tasks.productivityTrends, ...businessData.finance.financialTrends].join('\n')}
-` : 'Dados não disponíveis no momento.'}
-
-Responda sempre em português brasileiro e seja específico com os dados fornecidos.`
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          max_tokens: oracleSettings.maxTokens,
-          temperature: oracleSettings.temperature
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      return data.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.'
-
-    } catch (error) {
-      console.error('Error generating AI response:', error)
-      return `Erro ao conectar com a IA. Fornecendo análise baseada em dados:
-
-${generateDataBasedResponse(userMessage)}`
-    }
-  }
-
-  const generateDataBasedResponse = (userMessage: string): string => {
-    if (!businessData) {
-      return 'Aguardando carregamento dos dados do sistema...'
-    }
-
-    const message = userMessage.toLowerCase()
-
-    if (message.includes('vendas') || message.includes('leads') || message.includes('conversão')) {
-      return `**Análise de Vendas:**
-
-📊 **Métricas Atuais:**
-- Total de leads: ${businessData.leads.total}
-- Leads qualificados: ${businessData.leads.qualified}
-- Conversões: ${businessData.leads.won}
-- Taxa de conversão: ${businessData.leads.conversionRate}%
-
-💡 **Insights:**
-${businessData.leads.recentTrends.length > 0 ? businessData.leads.recentTrends.map(trend => `- ${trend}`).join('\n') : '- Dados insuficientes para análise de tendências'}
-
-🎯 **Recomendações:**
-- Foque na qualificação de leads para melhorar a taxa de conversão
-- Implemente follow-ups automatizados para leads qualificados`
-    }
-
-    if (message.includes('tarefas') || message.includes('produtividade') || message.includes('equipe')) {
-      return `**Análise de Produtividade:**
-
-📋 **Métricas Atuais:**
-- Total de tarefas: ${businessData.tasks.total}
-- Tarefas concluídas: ${businessData.tasks.completed}
-- Tarefas em atraso: ${businessData.tasks.overdue}
-- Taxa de conclusão: ${businessData.tasks.completionRate}%
-
-⚡ **Insights:**
-${businessData.tasks.productivityTrends.length > 0 ? businessData.tasks.productivityTrends.map(trend => `- ${trend}`).join('\n') : '- Dados insuficientes para análise de tendências'}
-
-🚀 **Recomendações:**
-- Configure alertas para tarefas próximas do vencimento
-- Implemente metodologias ágeis para melhorar o fluxo de trabalho`
-    }
-
-    if (message.includes('financeiro') || message.includes('receita') || message.includes('lucro')) {
-      return `**Análise Financeira:**
-
-💰 **Métricas Atuais:**
-- Receita mensal: R$ ${businessData.finance.totalRevenue.toLocaleString('pt-BR')}
-- Despesas mensais: R$ ${businessData.finance.totalExpenses.toLocaleString('pt-BR')}
-- Lucro líquido: R$ ${businessData.finance.netProfit.toLocaleString('pt-BR')}
-- Fluxo de caixa: R$ ${businessData.finance.cashFlow.toLocaleString('pt-BR')}
-
-📈 **Insights:**
-${businessData.finance.financialTrends.length > 0 ? businessData.finance.financialTrends.map(trend => `- ${trend}`).join('\n') : '- Dados insuficientes para análise de tendências'}
-
-💡 **Recomendações:**
-- Monitore regularmente a margem de lucro
-- Implemente controles de custos mais rigorosos`
-    }
-
-    // General overview
-    return `**Visão Geral do Negócio:**
-
-🎯 **Performance Geral:**
-- Leads: ${businessData.leads.total} (${businessData.leads.conversionRate}% conversão)
-- Produtividade: ${businessData.tasks.completionRate}% de conclusão
-- Saúde Financeira: ${businessData.finance.netProfit >= 0 ? 'Positiva' : 'Requer atenção'}
-
-📊 **Principais Insights:**
-${businessData.insights.length > 0 ? businessData.insights.map(insight => `- ${insight}`).join('\n') : '- Colete mais dados para insights detalhados'}
-
-🚀 **Recomendações Prioritárias:**
-${businessData.recommendations.length > 0 ? businessData.recommendations.map(rec => `- ${rec}`).join('\n') : '- Continue monitorando as métricas principais'}
-
-Para análises mais específicas, pergunte sobre vendas, produtividade ou finanças.`
-  }
-
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputMessage.trim(),
-      timestamp: new Date()
-    }
-
-    const loadingMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      isLoading: true
-    }
-
-    setMessages(prev => [...prev, userMessage, loadingMessage])
-    setInputMessage('')
-    setIsLoading(true)
-
+    if (!assistantMessage.trim() || !aiConfigured) return
+    
+    const userMessage = assistantMessage.trim()
+    setAssistantMessage('')
+    setAssistantResponse(null)
+    setIsProcessing(true)
+    
+    // Add user message to history
+    setAssistantHistory(prev => [...prev, { role: 'user', content: userMessage }])
+    
     try {
-      const response = await generateAIResponse(userMessage.content)
+      // In a real implementation, this would call an edge function to process the message
+      // For now, we'll simulate a response
+      setTimeout(() => {
+        let response = ''
+        
+        // Simple pattern matching for demo purposes
+        if (userMessage.toLowerCase().includes('vendas') || userMessage.toLowerCase().includes('receita')) {
+          response = "Analisando seus dados de vendas, observo um padrão sazonal com picos nos meses de março e setembro. Recomendo intensificar suas campanhas de marketing nesses períodos para maximizar resultados. Além disso, seus produtos de maior margem têm performance 23% melhor quando vendidos em pacotes promocionais."
+        } else if (userMessage.toLowerCase().includes('despesa') || userMessage.toLowerCase().includes('gasto')) {
+          response = "Suas despesas operacionais aumentaram 12% no último trimestre, principalmente em marketing digital. No entanto, o ROI dessas campanhas foi positivo, gerando um aumento de 18% nas conversões. Sugiro manter esse investimento, mas otimizar os canais com menor performance."
+        } else if (userMessage.toLowerCase().includes('cliente') || userMessage.toLowerCase().includes('lead')) {
+          response = "Sua taxa de conversão de leads está em 4.2%, abaixo da média do setor que é 5.8%. Analisando o funil de vendas, identifico que o principal gargalo está na etapa de qualificação. Recomendo revisar seu script de qualificação e implementar um sistema de pontuação de leads para priorizar os mais promissores."
+        } else if (userMessage.toLowerCase().includes('previsão') || userMessage.toLowerCase().includes('futuro')) {
+          response = "Com base nos dados históricos e tendências atuais, projeto um crescimento de 15-18% para o próximo trimestre. Os principais drivers serão: 1) Aumento da base de clientes recorrentes; 2) Expansão das vendas de produtos premium; 3) Redução da taxa de churn em 2.3 pontos percentuais. Recomendo focar em estratégias de upsell para maximizar o valor médio por cliente."
+        } else {
+          response = "Analisando seus dados de negócio, identifico três oportunidades principais:\n\n1. Otimização do funil de vendas: Sua taxa de conversão na etapa de demonstração é 30% menor que nas outras etapas.\n\n2. Segmentação de clientes: Clientes do segmento B têm LTV 2.4x maior, mas representam apenas 18% da base.\n\n3. Eficiência operacional: Automatizar os processos de follow-up pode liberar aproximadamente 15 horas/semana da sua equipe."
+        }
+        
+        setAssistantResponse(response)
+        setAssistantHistory(prev => [...prev, { role: 'assistant', content: response }])
+        setIsProcessing(false)
+      }, 2000)
       
-      setMessages(prev => prev.map(msg => 
-        msg.id === loadingMessage.id 
-          ? { ...msg, content: response, isLoading: false }
-          : msg
-      ))
     } catch (error) {
-      setMessages(prev => prev.map(msg => 
-        msg.id === loadingMessage.id 
-          ? { 
-              ...msg, 
-              content: 'Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente.', 
-              isLoading: false 
-            }
-          : msg
-      ))
-    } finally {
-      setIsLoading(false)
+      console.error('Error processing message:', error)
+      setAssistantResponse('Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.')
+      setIsProcessing(false)
     }
   }
 
-  const generateReport = async (type: 'monthly' | 'expense' | 'cashflow' | 'strategic') => {
-    const reportMessage: Message = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: `Gerando relatório ${type === 'monthly' ? 'mensal' : type === 'expense' ? 'de gastos' : type === 'cashflow' ? 'de fluxo de caixa' : 'estratégico'}...`,
-      timestamp: new Date(),
-      isLoading: true,
-      reportType: type
-    }
-
-    setMessages(prev => [...prev, reportMessage])
-
-    // Simulate report generation
-    setTimeout(() => {
-      const reportContent = generateReportContent(type)
-      setMessages(prev => prev.map(msg => 
-        msg.id === reportMessage.id 
-          ? { ...msg, content: reportContent, isLoading: false }
-          : msg
-      ))
-    }, 2000)
+  const handleExportInsights = () => {
+    // Create a text file with all insights
+    const insightsText = insights.map(insight => {
+      return `INSIGHT: ${insight.title}\nPrioridade: ${priorityLabels[insight.priority as keyof typeof priorityLabels]}\nTipo: ${insight.type}\nDescrição: ${insight.description}\nData: ${new Date(insight.created_at).toLocaleDateString('pt-BR')}\n\n`;
+    }).join('---\n\n');
+    
+    // Create a blob and download link
+    const blob = new Blob([insightsText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `insights-corepulse-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
-
-  const generateReportContent = (type: string): string => {
-    if (!businessData) return 'Dados insuficientes para gerar o relatório.'
-
-    switch (type) {
-      case 'monthly':
-        return `# 📊 Relatório Mensal Executivo
-
-## Resumo Executivo
-${businessData.finance.netProfit >= 0 ? '✅' : '⚠️'} **Status Geral:** ${businessData.finance.netProfit >= 0 ? 'Positivo' : 'Requer Atenção'}
-
-## 💰 Performance Financeira
-- **Receita:** R$ ${businessData.finance.totalRevenue.toLocaleString('pt-BR')}
-- **Despesas:** R$ ${businessData.finance.totalExpenses.toLocaleString('pt-BR')}
-- **Lucro Líquido:** R$ ${businessData.finance.netProfit.toLocaleString('pt-BR')}
-- **Margem:** ${businessData.finance.totalRevenue > 0 ? ((businessData.finance.netProfit / businessData.finance.totalRevenue) * 100).toFixed(1) : 0}%
-
-## 🎯 Performance de Vendas
-- **Leads Processados:** ${businessData.leads.total}
-- **Taxa de Conversão:** ${businessData.leads.conversionRate}%
-- **Receita por Lead:** R$ ${businessData.leads.total > 0 ? (businessData.finance.totalRevenue / businessData.leads.total).toLocaleString('pt-BR') : '0'}
-
-## ⚡ Produtividade
-- **Taxa de Conclusão:** ${businessData.tasks.completionRate}%
-- **Tarefas em Atraso:** ${businessData.tasks.overdue}
-
-## 🚀 Recomendações
-${businessData.recommendations.map(rec => `- ${rec}`).join('\n')}`
-
-      case 'strategic':
-        return `# 🎯 Relatório Estratégico
-
-## Análise SWOT Automatizada
-
-### 💪 Forças
-${businessData.leads.conversionRate > 10 ? '- Alta taxa de conversão de leads' : ''}
-${businessData.tasks.completionRate > 70 ? '- Boa produtividade da equipe' : ''}
-${businessData.finance.netProfit > 0 ? '- Lucratividade positiva' : ''}
-
-### ⚠️ Fraquezas
-${businessData.tasks.overdue > 0 ? `- ${businessData.tasks.overdue} tarefas em atraso` : ''}
-${businessData.leads.conversionRate < 5 ? '- Taxa de conversão baixa' : ''}
-${businessData.finance.netProfit < 0 ? '- Resultado financeiro negativo' : ''}
-
-### 🔍 Oportunidades Identificadas
-- Otimização do funil de vendas
-- Automação de processos repetitivos
-- Expansão para novos segmentos
-
-### 🎯 Plano de Ação Recomendado
-1. **Curto Prazo (30 dias):**
-   - Resolver tarefas em atraso
-   - Implementar follow-ups automatizados
-
-2. **Médio Prazo (90 dias):**
-   - Otimizar processo de qualificação
-   - Revisar estrutura de custos
-
-3. **Longo Prazo (6 meses):**
-   - Expandir equipe de vendas
-   - Implementar novas tecnologias`
-
-      default:
-        return 'Relatório em desenvolvimento...'
-    }
-  }
-
-  const clearChat = () => {
-    setMessages([])
-    localStorage.removeItem('coreoracle-messages')
-  }
-
-  const quickActions = [
-    { 
-      label: 'Análise de Vendas', 
-      icon: TrendingUp, 
-      action: () => setInputMessage('Faça uma análise detalhada das minhas vendas e conversões') 
-    },
-    { 
-      label: 'Performance da Equipe', 
-      icon: Users, 
-      action: () => setInputMessage('Como está a produtividade da minha equipe?') 
-    },
-    { 
-      label: 'Saúde Financeira', 
-      icon: DollarSign, 
-      action: () => setInputMessage('Analise a saúde financeira do meu negócio') 
-    },
-    { 
-      label: 'Relatório Estratégico', 
-      icon: Target, 
-      action: () => generateReport('strategic') 
-    }
-  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -700,23 +220,23 @@ ${businessData.finance.netProfit < 0 ? '- Resultado financeiro negativo' : ''}
                 </div>
               </button>
               <button
-                onClick={() => setSelectedTab('oracle')}
+                onClick={() => setSelectedTab('assistant')}
                 className={`py-4 px-6 border-b-2 font-medium text-sm ${
-                  selectedTab === 'oracle'
+                  selectedTab === 'assistant'
                     ? 'border-purple-500 text-purple-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
                 <div className="flex items-center">
                   <Brain size={16} className="mr-2" />
-                  Consultor Estratégico
+                  Assistente IA
                 </div>
               </button>
             </nav>
           </div>
         </div>
 
-        {selectedTab === 'insights' ? (
+        {selectedTab === 'insights' && (
           <div>
             {/* Insights Overview */}
             <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -761,6 +281,17 @@ ${businessData.finance.netProfit < 0 ? '- Resultado financeiro negativo' : ''}
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Export Button */}
+            <div className="flex justify-end mb-6">
+              <button
+                onClick={handleExportInsights}
+                className="flex items-center text-gray-700 bg-white px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                <Download size={16} className="mr-2" />
+                Exportar Insights
+              </button>
             </div>
 
             {/* Insights List */}
@@ -845,7 +376,9 @@ ${businessData.finance.netProfit < 0 ? '- Resultado financeiro negativo' : ''}
               </div>
             )}
           </div>
-        ) : selectedTab === 'automations' ? (
+        )}
+
+        {selectedTab === 'automations' && (
           <div>
             {/* Automations Overview */}
             <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -973,419 +506,299 @@ ${businessData.finance.netProfit < 0 ? '- Resultado financeiro negativo' : ''}
               </div>
             )}
           </div>
-        ) : (
-          <div className="grid lg:grid-cols-4 gap-6">
-            {/* Sidebar */}
-            <div className="lg:col-span-1 space-y-6">
-              {/* Business Metrics */}
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <BarChart3 className="mr-2 text-indigo-600" size={20} />
-                  Métricas do Negócio
-                </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-600">Conversão de Leads</span>
-                      <span className="font-medium">{leadStats?.conversionRate || '0%'}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: leadStats?.conversionRate?.replace('%', '') + '%' || '0%' }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-600">Produtividade</span>
-                      <span className="font-medium">{taskStats?.completionRate || '0%'}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-green-600 h-2 rounded-full" 
-                        style={{ width: taskStats?.completionRate?.replace('%', '') + '%' || '0%' }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-600">Margem de Lucro</span>
-                      <span className="font-medium">
-                        {financeStats?.monthlyIncome && financeStats?.monthlyExpenses 
-                          ? ((financeStats.monthlyIncome - financeStats.monthlyExpenses) / financeStats.monthlyIncome * 100).toFixed(1) + '%'
-                          : '0%'
-                        }
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-600 h-2 rounded-full" 
-                        style={{ 
-                          width: financeStats?.monthlyIncome && financeStats?.monthlyExpenses 
-                            ? ((financeStats.monthlyIncome - financeStats.monthlyExpenses) / financeStats.monthlyIncome * 100) + '%'
-                            : '0%'
-                        }}
-                      ></div>
-                    </div>
-                  </div>
+        )}
+
+        {selectedTab === 'assistant' && (
+          <div className="grid md:grid-cols-3 gap-6 h-[calc(100vh-240px)]">
+            {/* Left Sidebar - Settings */}
+            <div className="bg-white rounded-xl shadow-sm p-6 md:col-span-1">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Configurações</h3>
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Settings size={18} className="text-purple-600" />
                 </div>
               </div>
 
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Zap className="mr-2 text-amber-500" size={20} />
-                  Ações Rápidas
-                </h3>
-                
-                <div className="space-y-2">
-                  {quickActions.map((action, index) => (
-                    <button
-                      key={index}
-                      onClick={action.action}
-                      className="w-full flex items-center p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
-                    >
-                      <action.icon className="mr-3 text-gray-500" size={18} />
-                      <span className="text-sm font-medium text-gray-700">{action.label}</span>
-                    </button>
-                  ))}
+              {!aiConfigured ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <AlertTriangle className="text-yellow-600 mr-3 mt-0.5" size={20} />
+                    <div>
+                      <p className="text-yellow-800 font-medium">Integração com IA necessária</p>
+                      <p className="text-yellow-700 text-sm mt-1">
+                        Configure sua integração com OpenAI para usar o assistente inteligente.
+                      </p>
+                      <button
+                        onClick={() => setShowIntegrationSetup(true)}
+                        className="mt-3 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 text-sm"
+                      >
+                        Configurar Agora
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <CheckCircle className="text-green-600 mr-3 mt-0.5" size={20} />
+                    <div>
+                      <p className="text-green-800 font-medium">IA Configurada</p>
+                      <p className="text-green-700 text-sm mt-1">
+                        Sua integração com OpenAI está ativa e funcionando.
+                      </p>
+                      <button
+                        onClick={() => setShowIntegrationSetup(true)}
+                        className="mt-3 text-green-700 hover:text-green-800 text-sm flex items-center"
+                      >
+                        <Settings size={14} className="mr-1" />
+                        Ajustar Configurações
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-gray-900">Configurações do Assistente</h4>
+                  <button
+                    onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    {showAdvancedSettings ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                </div>
+
+                {showAdvancedSettings && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Modelo
+                      </label>
+                      <select
+                        value={assistantSettings.model}
+                        onChange={(e) => setAssistantSettings({...assistantSettings, model: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Rápido)</option>
+                        <option value="gpt-4">GPT-4 (Avançado)</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo (Equilibrado)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Temperatura ({assistantSettings.temperature})
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={assistantSettings.temperature}
+                        onChange={(e) => setAssistantSettings({...assistantSettings, temperature: parseFloat(e.target.value)})}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Preciso</span>
+                        <span>Criativo</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Máximo de Tokens
+                      </label>
+                      <input
+                        type="number"
+                        value={assistantSettings.maxTokens}
+                        onChange={(e) => setAssistantSettings({...assistantSettings, maxTokens: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        min="100"
+                        max="4000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Prompt do Sistema
+                      </label>
+                      <textarea
+                        value={assistantSettings.systemPrompt}
+                        onChange={(e) => setAssistantSettings({...assistantSettings, systemPrompt: e.target.value})}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Reports */}
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <FileText className="mr-2 text-green-600" size={20} />
-                  Relatórios
-                </h3>
-                
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <HelpCircle size={16} className="mr-2 text-purple-500" />
+                  Sugestões de Perguntas
+                </h4>
                 <div className="space-y-2">
                   <button
-                    onClick={() => generateReport('monthly')}
-                    className="w-full flex items-center p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onClick={() => {
+                      setAssistantMessage("Quais são as tendências de vendas dos últimos 3 meses?")
+                      setTimeout(() => handleSendMessage(), 100)
+                    }}
+                    className="w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
-                    <Calendar className="mr-3 text-gray-500" size={18} />
-                    <span className="text-sm font-medium text-gray-700">Relatório Mensal</span>
+                    Quais são as tendências de vendas dos últimos 3 meses?
                   </button>
-                  
                   <button
-                    onClick={() => generateReport('expense')}
-                    className="w-full flex items-center p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onClick={() => {
+                      setAssistantMessage("Como posso reduzir meus custos operacionais?")
+                      setTimeout(() => handleSendMessage(), 100)
+                    }}
+                    className="w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
-                    <PieChart className="mr-3 text-gray-500" size={18} />
-                    <span className="text-sm font-medium text-gray-700">Análise de Gastos</span>
+                    Como posso reduzir meus custos operacionais?
                   </button>
-                  
                   <button
-                    onClick={() => generateReport('cashflow')}
-                    className="w-full flex items-center p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onClick={() => {
+                      setAssistantMessage("Quais clientes têm maior potencial de conversão?")
+                      setTimeout(() => handleSendMessage(), 100)
+                    }}
+                    className="w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
-                    <Activity className="mr-3 text-gray-500" size={18} />
-                    <span className="text-sm font-medium text-gray-700">Fluxo de Caixa</span>
+                    Quais clientes têm maior potencial de conversão?
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAssistantMessage("Faça uma previsão de receita para o próximo trimestre")
+                      setTimeout(() => handleSendMessage(), 100)
+                    }}
+                    className="w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                  >
+                    Faça uma previsão de receita para o próximo trimestre
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Chat Area */}
-            <div className="lg:col-span-3 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-180px)]">
+            <div className="bg-white rounded-xl shadow-sm flex flex-col md:col-span-2">
               {/* Chat Header */}
-              <div className="p-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-2 rounded-lg mr-3">
-                      <Bot size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">Consultor Estratégico</h3>
-                      <p className="text-xs text-gray-600">Analisando dados de CRM, tarefas e finanças</p>
-                    </div>
+              <div className="p-4 border-b flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-purple-100 p-2 rounded-lg mr-3">
+                    <Brain size={20} className="text-purple-600" />
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        if (confirm('Limpar todo o histórico de conversa?')) {
-                          clearChat()
-                        }
-                      }}
-                      className="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100"
-                      title="Limpar conversa"
-                    >
-                      <RefreshCw size={16} />
-                    </button>
-                    <button
-                      onClick={() => setShowSettings(true)}
-                      className="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100"
-                      title="Configurações"
-                    >
-                      <Settings size={16} />
-                    </button>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Assistente CorePulse</h3>
+                    <p className="text-sm text-gray-600">Consultor estratégico inteligente</p>
                   </div>
                 </div>
+                <button
+                  onClick={() => {
+                    setAssistantHistory([])
+                    setAssistantResponse(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100"
+                  title="Limpar conversa"
+                >
+                  <RefreshCw size={16} />
+                </button>
               </div>
 
               {/* Chat Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-3xl rounded-lg p-4 ${
-                        message.type === 'user'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
-                      }`}
-                    >
-                      {message.isLoading ? (
-                        <div className="flex items-center space-x-2">
-                          <Loader2 className="animate-spin" size={16} />
-                          <span>{message.content || 'Gerando resposta...'}</span>
-                        </div>
-                      ) : (
-                        <div className="prose prose-sm max-w-none">
-                          {message.reportType ? (
-                            <div>
-                              <div className="font-medium mb-2">
-                                {message.reportType === 'monthly' && '📊 Relatório Mensal'}
-                                {message.reportType === 'expense' && '📉 Análise de Gastos'}
-                                {message.reportType === 'cashflow' && '💰 Fluxo de Caixa'}
-                                {message.reportType === 'strategic' && '🎯 Relatório Estratégico'}
-                              </div>
-                              <div dangerouslySetInnerHTML={{ __html: message.content.replace(/\n/g, '<br>') }} />
-                              <div className="mt-3">
-                                <button
-                                  onClick={() => {
-                                    alert('Relatório baixado com sucesso!')
-                                  }}
-                                  className="flex items-center text-xs text-indigo-600 hover:text-indigo-800"
-                                >
-                                  <Download size={12} className="mr-1" />
-                                  Baixar como PDF
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div dangerouslySetInnerHTML={{ __html: message.content.replace(/\n/g, '<br>') }} />
-                          )}
-                        </div>
-                      )}
-                      <div className="mt-1 text-right">
-                        <span className={`text-xs ${message.type === 'user' ? 'text-indigo-200' : 'text-gray-500'}`}>
-                          {message.timestamp.toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
+                {assistantHistory.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center max-w-md">
+                      <Brain className="mx-auto mb-4 text-purple-300" size={48} />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Assistente Estratégico CorePulse
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Faça perguntas sobre seus dados de negócio, solicite análises ou peça recomendações estratégicas.
+                      </p>
+                      <div className="bg-purple-50 p-4 rounded-lg text-sm text-purple-800">
+                        <p className="font-medium mb-2">Exemplos de perguntas:</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>Quais são as tendências de vendas recentes?</li>
+                          <li>Como posso melhorar minha taxa de conversão?</li>
+                          <li>Quais são meus clientes mais valiosos?</li>
+                          <li>Faça uma previsão de receita para o próximo trimestre</li>
+                        </ul>
                       </div>
                     </div>
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
+                ) : (
+                  assistantHistory.map((message, index) => (
+                    <div
+                      key={index}
+                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-3xl px-4 py-3 rounded-lg ${
+                          message.role === 'user'
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        {message.role === 'assistant' ? (
+                          <div className="whitespace-pre-line">{message.content}</div>
+                        ) : (
+                          <p>{message.content}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isProcessing && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 px-4 py-3 rounded-lg text-gray-900">
+                      <div className="flex items-center space-x-2">
+                        <Loader2 size={16} className="animate-spin text-purple-600" />
+                        <span>Analisando dados e gerando resposta...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Input Area */}
+              {/* Chat Input */}
               <div className="p-4 border-t">
                 <div className="flex items-center space-x-2">
                   <input
                     type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
+                    value={assistantMessage}
+                    onChange={(e) => setAssistantMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="Pergunte algo ao consultor estratégico..."
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    disabled={isLoading}
+                    placeholder={aiConfigured ? "Faça uma pergunta sobre seu negócio..." : "Configure a integração com IA para usar o assistente..."}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    disabled={!aiConfigured || isProcessing}
                   />
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isLoading}
-                    className="bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!aiConfigured || !assistantMessage.trim() || isProcessing}
+                    className="bg-purple-600 text-white p-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? (
-                      <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                      <Send size={20} />
-                    )}
+                    <Send size={20} />
                   </button>
                 </div>
-                <div className="flex items-center mt-2 text-xs text-gray-500">
-                  <Lightbulb size={12} className="mr-1" />
-                  <span>Dica: Pergunte sobre vendas, produtividade, finanças ou solicite um relatório estratégico</span>
-                </div>
+                {!aiConfigured && (
+                  <p className="text-xs text-orange-600 mt-2">
+                    Configure a integração com OpenAI para utilizar o assistente inteligente.
+                  </p>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Configurações do Consultor Estratégico
-                </h2>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Provedor de IA
-                </label>
-                <select
-                  value={oracleSettings.aiProvider}
-                  onChange={(e) => setOracleSettings({ ...oracleSettings, aiProvider: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="openai">OpenAI (ChatGPT)</option>
-                  <option value="anthropic" disabled>Anthropic (Claude) - Em breve</option>
-                  <option value="google" disabled>Google (Gemini) - Em breve</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Modelo
-                </label>
-                <select
-                  value={oracleSettings.model}
-                  onChange={(e) => setOracleSettings({ ...oracleSettings, model: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Mais rápido e econômico)</option>
-                  <option value="gpt-4">GPT-4 (Mais inteligente)</option>
-                  <option value="gpt-4-turbo">GPT-4 Turbo (Equilibrado)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Chave da API (Opcional)
-                </label>
-                <input
-                  type="password"
-                  value={oracleSettings.apiKey}
-                  onChange={(e) => setOracleSettings({ ...oracleSettings, apiKey: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="sk-..."
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Se configurada, substitui a integração do CRM. Mantenha em branco para usar a integração global.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Prompt do Sistema
-                </label>
-                <textarea
-                  value={oracleSettings.systemPrompt}
-                  onChange={(e) => setOracleSettings({ ...oracleSettings, systemPrompt: e.target.value })}
-                  rows={5}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Define a personalidade e comportamento do assistente.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Temperatura (0-1)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={oracleSettings.temperature}
-                    onChange={(e) => setOracleSettings({ ...oracleSettings, temperature: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Valores mais baixos = mais previsível, mais altos = mais criativo
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Máximo de Tokens
-                  </label>
-                  <input
-                    type="number"
-                    min="100"
-                    max="4000"
-                    step="100"
-                    value={oracleSettings.maxTokens}
-                    onChange={(e) => setOracleSettings({ ...oracleSettings, maxTokens: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Limite máximo de tokens na resposta
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Profundidade de Análise
-                </label>
-                <select
-                  value={oracleSettings.analysisDepth}
-                  onChange={(e) => setOracleSettings({ ...oracleSettings, analysisDepth: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="basic">Básica - Análise rápida e direta</option>
-                  <option value="detailed">Detalhada - Análise completa com recomendações</option>
-                  <option value="comprehensive">Abrangente - Análise profunda com plano de ação</option>
-                </select>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-center">
-                  <AlertTriangle className="text-yellow-600 mr-3" size={20} />
-                  <div>
-                    <p className="text-yellow-800 font-medium">Importante</p>
-                    <p className="text-yellow-700 text-sm">
-                      Suas configurações são salvas apenas neste navegador. Para usar uma integração global, configure-a no CoreCRM.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 border-t bg-gray-50 flex justify-end space-x-4">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={saveSettings}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-              >
-                Salvar Configurações
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Integration Setup Modal */}
+      <IntegrationSetup
+        isOpen={showIntegrationSetup}
+        onClose={() => setShowIntegrationSetup(false)}
+        integrationType="ai"
+      />
     </div>
   )
 }
