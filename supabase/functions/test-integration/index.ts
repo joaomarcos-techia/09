@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +22,7 @@ serve(async (req) => {
       case 'email':
         testResult = await testEmail(config)
         break
-      case 'openai':
+      case 'ai':
         testResult = await testOpenAI(config)
         break
       default:
@@ -63,10 +62,17 @@ async function testWhatsApp(config: any) {
     })
 
     if (response.ok) {
-      return { success: true, message: 'Conexão com WhatsApp estabelecida com sucesso!' }
+      const data = await response.json()
+      return { 
+        success: true, 
+        message: `Conexão estabelecida! Número verificado: ${data.display_phone_number || config.phoneNumber}` 
+      }
     } else {
       const error = await response.json()
-      return { success: false, message: `Erro na conexão: ${error.error?.message || 'Token inválido'}` }
+      return { 
+        success: false, 
+        message: `Erro na API do WhatsApp: ${error.error?.message || 'Token inválido ou número não encontrado'}` 
+      }
     }
   } catch (error) {
     return { success: false, message: `Erro de conexão: ${error.message}` }
@@ -79,16 +85,40 @@ async function testEmail(config: any) {
       return { success: false, message: 'Configurações SMTP incompletas' }
     }
 
-    // For demo purposes, we'll simulate a successful connection
-    // In production, you would actually test the SMTP connection
-    const isValidConfig = config.smtpHost.includes('smtp') && 
-                         config.username.includes('@') && 
-                         config.password.length > 0
+    // Validação de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(config.username)) {
+      return { success: false, message: 'Formato de email inválido' }
+    }
 
-    if (isValidConfig) {
-      return { success: true, message: 'Configuração SMTP válida!' }
-    } else {
-      return { success: false, message: 'Configurações SMTP inválidas' }
+    // Validação de servidores SMTP conhecidos
+    const commonServers = {
+      'smtp.gmail.com': 587,
+      'smtp-mail.outlook.com': 587,
+      'smtp.mail.yahoo.com': 587,
+      'smtp.office365.com': 587
+    }
+
+    const expectedPort = commonServers[config.smtpHost]
+    if (expectedPort && parseInt(config.smtpPort) !== expectedPort) {
+      return { 
+        success: false, 
+        message: `Para ${config.smtpHost}, a porta recomendada é ${expectedPort}` 
+      }
+    }
+
+    // Validação específica para Gmail
+    if (config.smtpHost.includes('gmail') && !config.password.includes(' ')) {
+      return { 
+        success: false, 
+        message: 'Para Gmail, use uma "Senha de App" em vez da senha normal. Ative a autenticação de 2 fatores e gere uma senha de app.' 
+      }
+    }
+
+    // Teste básico de conectividade (em produção, faria teste SMTP real)
+    return { 
+      success: true, 
+      message: 'Configuração SMTP válida! Lembre-se de testar o envio real em produção.' 
     }
   } catch (error) {
     return { success: false, message: `Erro na configuração: ${error.message}` }
@@ -99,6 +129,10 @@ async function testOpenAI(config: any) {
   try {
     if (!config.apiKey) {
       return { success: false, message: 'API Key da OpenAI é obrigatória' }
+    }
+
+    if (!config.apiKey.startsWith('sk-')) {
+      return { success: false, message: 'Chave da API deve começar com "sk-"' }
     }
 
     // Test OpenAI API connection
@@ -119,10 +153,26 @@ async function testOpenAI(config: any) {
     })
 
     if (response.ok) {
-      return { success: true, message: 'Conexão com OpenAI estabelecida com sucesso!' }
+      const data = await response.json()
+      return { 
+        success: true, 
+        message: `Conexão com OpenAI estabelecida! Modelo ${config.model || 'gpt-3.5-turbo'} funcionando.` 
+      }
     } else {
       const error = await response.json()
-      return { success: false, message: `Erro na API: ${error.error?.message || 'API Key inválida'}` }
+      
+      if (response.status === 401) {
+        return { success: false, message: 'Chave da API inválida. Verifique se está correta e ativa.' }
+      } else if (response.status === 429) {
+        return { success: false, message: 'Limite de requisições excedido. Verifique seu plano OpenAI.' }
+      } else if (response.status === 400) {
+        return { success: false, message: `Modelo ${config.model} não disponível ou parâmetros inválidos.` }
+      } else {
+        return { 
+          success: false, 
+          message: `Erro da API OpenAI: ${error.error?.message || 'Erro desconhecido'}` 
+        }
+      }
     }
   } catch (error) {
     return { success: false, message: `Erro de conexão: ${error.message}` }

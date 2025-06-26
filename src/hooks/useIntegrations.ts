@@ -16,6 +16,9 @@ export interface Integration {
     password?: string
     model?: string
     systemPrompt?: string
+    maxTokens?: number
+    temperature?: number
+    useSSL?: boolean
   }
   is_active: boolean
   last_sync: string | null
@@ -101,7 +104,7 @@ export function useIntegrations() {
         throw new Error('Integration not found')
       }
 
-      // Call edge function to test integration
+      // Fazer teste real através de edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-integration`, {
         method: 'POST',
         headers: {

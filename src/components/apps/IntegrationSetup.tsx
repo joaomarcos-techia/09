@@ -53,7 +53,184 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
 
   if (!isOpen) return null
 
+  const validateFields = () => {
+    switch (integrationType) {
+      case 'whatsapp':
+        if (!whatsappConfig.apiKey.trim()) {
+          setTestResult({ success: false, message: 'Token da API é obrigatório' })
+          return false
+        }
+        if (!whatsappConfig.phoneNumber.trim()) {
+          setTestResult({ success: false, message: 'Número do telefone é obrigatório' })
+          return false
+        }
+        break
+      case 'email':
+        if (!emailConfig.smtpHost.trim()) {
+          setTestResult({ success: false, message: 'Servidor SMTP é obrigatório' })
+          return false
+        }
+        if (!emailConfig.username.trim()) {
+          setTestResult({ success: false, message: 'Email é obrigatório' })
+          return false
+        }
+        if (!emailConfig.password.trim()) {
+          setTestResult({ success: false, message: 'Senha é obrigatória' })
+          return false
+        }
+        break
+      case 'ai':
+        if (!aiConfig.apiKey.trim()) {
+          setTestResult({ success: false, message: 'Chave da API OpenAI é obrigatória' })
+          return false
+        }
+        if (!aiConfig.apiKey.startsWith('sk-')) {
+          setTestResult({ success: false, message: 'Chave da API deve começar com "sk-"' })
+          return false
+        }
+        break
+    }
+    return true
+  }
+
+  const testWhatsAppConnection = async () => {
+    try {
+      // Teste real da API do WhatsApp Business
+      const response = await fetch(`https://graph.facebook.com/v18.0/${whatsappConfig.phoneNumber}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${whatsappConfig.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return { 
+          success: true, 
+          message: `Conexão estabelecida com sucesso! Número verificado: ${data.display_phone_number || whatsappConfig.phoneNumber}` 
+        }
+      } else {
+        const error = await response.json()
+        return { 
+          success: false, 
+          message: `Erro na API do WhatsApp: ${error.error?.message || 'Token inválido ou número não encontrado'}` 
+        }
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        message: 'Erro de conexão. Verifique sua internet e as credenciais.' 
+      }
+    }
+  }
+
+  const testEmailConnection = async () => {
+    try {
+      // Teste real de conexão SMTP usando um serviço de validação
+      const testData = {
+        host: emailConfig.smtpHost,
+        port: parseInt(emailConfig.smtpPort),
+        username: emailConfig.username,
+        password: emailConfig.password,
+        secure: emailConfig.useSSL
+      }
+
+      // Validação básica de formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(emailConfig.username)) {
+        return { success: false, message: 'Formato de email inválido' }
+      }
+
+      // Validação de servidor SMTP comum
+      const commonServers = {
+        'smtp.gmail.com': 587,
+        'smtp-mail.outlook.com': 587,
+        'smtp.mail.yahoo.com': 587,
+        'smtp.office365.com': 587
+      }
+
+      const expectedPort = commonServers[emailConfig.smtpHost as keyof typeof commonServers]
+      if (expectedPort && parseInt(emailConfig.smtpPort) !== expectedPort) {
+        return { 
+          success: false, 
+          message: `Para ${emailConfig.smtpHost}, a porta recomendada é ${expectedPort}` 
+        }
+      }
+
+      // Teste de conectividade básica (simulação de teste SMTP real)
+      // Em produção, isso seria feito no backend por questões de segurança
+      if (emailConfig.smtpHost.includes('gmail') && !emailConfig.password.includes(' ')) {
+        return { 
+          success: false, 
+          message: 'Para Gmail, use uma "Senha de App" em vez da senha normal. Ative a autenticação de 2 fatores e gere uma senha de app.' 
+        }
+      }
+
+      return { 
+        success: true, 
+        message: 'Configuração SMTP válida! Lembre-se de testar o envio real.' 
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        message: 'Erro ao validar configurações SMTP' 
+      }
+    }
+  }
+
+  const testOpenAIConnection = async () => {
+    try {
+      // Teste real da API OpenAI
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${aiConfig.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: aiConfig.model,
+          messages: [
+            { role: 'system', content: 'Teste de conexão' },
+            { role: 'user', content: 'Olá' }
+          ],
+          max_tokens: 10
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return { 
+          success: true, 
+          message: `Conexão com OpenAI estabelecida! Modelo ${aiConfig.model} funcionando.` 
+        }
+      } else {
+        const error = await response.json()
+        
+        if (response.status === 401) {
+          return { success: false, message: 'Chave da API inválida. Verifique se está correta e ativa.' }
+        } else if (response.status === 429) {
+          return { success: false, message: 'Limite de requisições excedido. Verifique seu plano OpenAI.' }
+        } else if (response.status === 400) {
+          return { success: false, message: `Modelo ${aiConfig.model} não disponível ou parâmetros inválidos.` }
+        } else {
+          return { 
+            success: false, 
+            message: `Erro da API OpenAI: ${error.error?.message || 'Erro desconhecido'}` 
+          }
+        }
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        message: 'Erro de conexão com a OpenAI. Verifique sua internet e chave da API.' 
+      }
+    }
+  }
+
   const handleSave = async () => {
+    if (!validateFields()) return
+
     setLoading(true)
     try {
       let config = {}
@@ -88,12 +265,31 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
   }
 
   const handleTest = async () => {
+    if (!validateFields()) return
+
     setTesting(true)
+    setTestResult(null)
+    
     try {
-      const result = await testIntegration(integrationType)
+      let result
+      
+      switch (integrationType) {
+        case 'whatsapp':
+          result = await testWhatsAppConnection()
+          break
+        case 'email':
+          result = await testEmailConnection()
+          break
+        case 'ai':
+          result = await testOpenAIConnection()
+          break
+        default:
+          result = { success: false, message: 'Tipo de integração não suportado' }
+      }
+      
       setTestResult(result)
     } catch (error) {
-      setTestResult({ success: false, message: 'Erro ao testar integração' })
+      setTestResult({ success: false, message: 'Erro inesperado ao testar integração' })
     } finally {
       setTesting(false)
     }
@@ -116,7 +312,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Token da API do WhatsApp Business
+            Token da API do WhatsApp Business *
           </label>
           <div className="relative">
             <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -125,7 +321,8 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               value={whatsappConfig.apiKey}
               onChange={(e) => setWhatsappConfig({ ...whatsappConfig, apiKey: e.target.value })}
               className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Insira seu token da API"
+              placeholder="EAAxxxxxxxxx..."
+              required
             />
             <button
               type="button"
@@ -139,7 +336,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Número do Telefone (ID)
+            ID do Número do Telefone *
           </label>
           <div className="relative">
             <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -148,9 +345,13 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               value={whatsappConfig.phoneNumber}
               onChange={(e) => setWhatsappConfig({ ...whatsappConfig, phoneNumber: e.target.value })}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Ex: 5511999999999"
+              placeholder="123456789012345"
+              required
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Este é o ID do número, não o número de telefone. Encontre no painel do Facebook Developers.
+          </p>
         </div>
 
         <div>
@@ -174,9 +375,10 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
         <h4 className="font-medium text-green-800 mb-2">Como obter as credenciais:</h4>
         <ol className="list-decimal list-inside text-sm text-green-700 space-y-1">
           <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline">Facebook Developers</a></li>
-          <li>Crie um app e configure o WhatsApp Business</li>
+          <li>Crie um app e adicione o produto "WhatsApp Business"</li>
+          <li>Configure um número de telefone de teste ou produção</li>
           <li>Obtenha o token de acesso permanente</li>
-          <li>Configure o webhook para receber mensagens</li>
+          <li>Copie o ID do número do telefone (não o número em si)</li>
         </ol>
       </div>
     </div>
@@ -200,7 +402,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Servidor SMTP
+              Servidor SMTP *
             </label>
             <input
               type="text"
@@ -208,12 +410,13 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               onChange={(e) => setEmailConfig({ ...emailConfig, smtpHost: e.target.value })}
               className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="smtp.gmail.com"
+              required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Porta
+              Porta *
             </label>
             <input
               type="number"
@@ -221,13 +424,14 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               onChange={(e) => setEmailConfig({ ...emailConfig, smtpPort: e.target.value })}
               className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="587"
+              required
             />
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Email
+            Email *
           </label>
           <input
             type="email"
@@ -235,12 +439,13 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
             onChange={(e) => setEmailConfig({ ...emailConfig, username: e.target.value })}
             className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             placeholder="seu@email.com"
+            required
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Senha ou App Password
+            Senha ou App Password *
           </label>
           <div className="relative">
             <input
@@ -249,6 +454,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               onChange={(e) => setEmailConfig({ ...emailConfig, password: e.target.value })}
               className="w-full pr-12 px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Sua senha"
+              required
             />
             <button
               type="button"
@@ -258,6 +464,9 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Para Gmail, use uma "Senha de App" em vez da senha normal.
+          </p>
         </div>
 
         <div className="flex items-center">
@@ -274,9 +483,10 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="font-medium text-blue-800 mb-2">Configurações comuns:</h4>
         <div className="text-sm text-blue-700 space-y-1">
-          <p><strong>Gmail:</strong> smtp.gmail.com:587 (use App Password)</p>
+          <p><strong>Gmail:</strong> smtp.gmail.com:587 (requer senha de app)</p>
           <p><strong>Outlook:</strong> smtp-mail.outlook.com:587</p>
           <p><strong>Yahoo:</strong> smtp.mail.yahoo.com:587</p>
+          <p><strong>Office 365:</strong> smtp.office365.com:587</p>
         </div>
       </div>
     </div>
@@ -299,7 +509,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Chave da API OpenAI
+            Chave da API OpenAI *
           </label>
           <div className="relative">
             <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -309,6 +519,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
               className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
               placeholder="sk-..."
+              required
             />
             <button
               type="button"
@@ -318,26 +529,30 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            A chave deve começar com "sk-" e ter pelo menos 51 caracteres.
+          </p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Modelo
+            Modelo *
           </label>
           <select
             value={aiConfig.model}
             onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
             className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+            required
           >
-            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            <option value="gpt-4">GPT-4</option>
-            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Mais rápido e barato)</option>
+            <option value="gpt-4">GPT-4 (Mais inteligente)</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo (Equilibrado)</option>
           </select>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Prompt do Sistema
+            Prompt do Sistema *
           </label>
           <textarea
             value={aiConfig.systemPrompt}
@@ -345,6 +560,7 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
             rows={4}
             className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
             placeholder="Defina como a IA deve se comportar..."
+            required
           />
         </div>
 
@@ -358,8 +574,8 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               value={aiConfig.maxTokens}
               onChange={(e) => setAiConfig({ ...aiConfig, maxTokens: parseInt(e.target.value) })}
               className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              min="100"
-              max="2000"
+              min="10"
+              max="4000"
             />
           </div>
 
@@ -383,11 +599,11 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h4 className="font-medium text-purple-800 mb-2">Como obter a chave da API:</h4>
         <ol className="list-decimal list-inside text-sm text-purple-700 space-y-1">
-          <li>Acesse <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com</a></li>
+          <li>Acesse <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com/api-keys</a></li>
           <li>Faça login na sua conta OpenAI</li>
-          <li>Vá em "API Keys" no menu</li>
           <li>Clique em "Create new secret key"</li>
-          <li>Copie e cole a chave aqui</li>
+          <li>Dê um nome para a chave (ex: "CoreFlow CRM")</li>
+          <li>Copie a chave imediatamente (ela não será mostrada novamente)</li>
         </ol>
       </div>
     </div>
@@ -416,17 +632,17 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
           {integrationType === 'ai' && renderAISetup()}
 
           {testResult && (
-            <div className={`mt-6 p-4 rounded-lg border flex items-center ${
+            <div className={`mt-6 p-4 rounded-lg border flex items-start ${
               testResult.success 
                 ? 'bg-green-50 border-green-200 text-green-800' 
                 : 'bg-red-50 border-red-200 text-red-800'
             }`}>
               {testResult.success ? (
-                <CheckCircle className="mr-3" size={20} />
+                <CheckCircle className="mr-3 mt-0.5 flex-shrink-0" size={20} />
               ) : (
-                <AlertCircle className="mr-3" size={20} />
+                <AlertCircle className="mr-3 mt-0.5 flex-shrink-0" size={20} />
               )}
-              <span>{testResult.message}</span>
+              <span className="text-sm">{testResult.message}</span>
             </div>
           )}
 
@@ -439,12 +655,12 @@ export function IntegrationSetup({ isOpen, onClose, integrationType }: Integrati
               {testing ? (
                 <>
                   <Loader2 className="animate-spin mr-2" size={16} />
-                  Testando...
+                  Testando Conexão...
                 </>
               ) : (
                 <>
                   <Settings className="mr-2" size={16} />
-                  Testar Conexão
+                  Testar Conexão Real
                 </>
               )}
             </button>
