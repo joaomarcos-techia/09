@@ -58,21 +58,21 @@ serve(async (req) => {
     const businessContext = {
       leads: {
         total: leadsRes.data?.length || 0,
-        byStatus: leadsRes.data?.reduce((acc, lead) => {
+        byStatus: leadsRes.data?.reduce((acc: any, lead: any) => {
           acc[lead.status] = (acc[lead.status] || 0) + 1
           return acc
         }, {}),
-        totalValue: leadsRes.data?.reduce((sum, lead) => sum + (lead.value || 0), 0)
+        totalValue: leadsRes.data?.reduce((sum: number, lead: any) => sum + (lead.value || 0), 0)
       },
       finances: {
-        income: transactionsRes.data?.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0) || 0,
-        expenses: transactionsRes.data?.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) || 0,
+        income: transactionsRes.data?.filter((t: any) => t.type === 'income').reduce((sum: number, t: any) => sum + t.amount, 0) || 0,
+        expenses: transactionsRes.data?.filter((t: any) => t.type === 'expense').reduce((sum: number, t: any) => sum + t.amount, 0) || 0,
         transactions: transactionsRes.data?.length || 0
       },
       tasks: {
         total: tasksRes.data?.length || 0,
-        completed: tasksRes.data?.filter(t => t.status === 'done').length || 0,
-        overdue: tasksRes.data?.filter(t => 
+        completed: tasksRes.data?.filter((t: any) => t.status === 'done').length || 0,
+        overdue: tasksRes.data?.filter((t: any) => 
           t.due_date && 
           new Date(t.due_date) < new Date() && 
           t.status !== 'done'
