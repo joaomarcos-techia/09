@@ -33,7 +33,8 @@ import {
   Palette,
   Database,
   Save,
-  Check
+  Check,
+  Brain
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLeads } from '../hooks/useLeads'
@@ -47,6 +48,7 @@ import { CoreCRM } from './apps/CoreCRM'
 import { CoreTask } from './apps/CoreTask'
 import { CoreFinance } from './apps/CoreFinance'
 import { CorePulse } from './apps/CorePulse'
+import { CoreOracle } from './apps/CoreOracle'
 import { PaymentSettings } from './apps/PaymentSettings'
 import { ProfileSettings } from './apps/ProfileSettings'
 
@@ -64,7 +66,8 @@ export function Dashboard() {
       corecrm: { enabled: true, autoSync: true, notifications: true },
       coretask: { enabled: true, autoSync: true, notifications: true },
       corefinance: { enabled: true, autoSync: true, notifications: true },
-      corepulse: { enabled: true, autoSync: true, notifications: true }
+      corepulse: { enabled: true, autoSync: true, notifications: true },
+      coreoracle: { enabled: true, autoSync: true, notifications: true }
     },
     apis: {
       openai: { key: '', model: 'gpt-3.5-turbo' },
@@ -211,6 +214,29 @@ export function Dashboard() {
       loading: financeLoading,
       error: financeError,
       enabled: settingsData.saas.corefinance.enabled
+    },
+    {
+      id: 'oracle',
+      name: 'CoreOracle',
+      icon: Brain,
+      description: 'Consultor estratégico inteligente para análise de negócios',
+      color: 'from-indigo-500 to-purple-600',
+      features: [
+        'Análise integrada de todos os dados',
+        'Recomendações estratégicas',
+        'Previsões baseadas em tendências',
+        'Geração de relatórios executivos',
+        'Insights personalizados',
+        'Assistente de decisões'
+      ],
+      stats: [
+        { label: 'Insights', value: insightStats?.total?.toString() || '0', icon: Lightbulb },
+        { label: 'Relatórios', value: '3', icon: FileText },
+        { label: 'Consultas', value: '12', icon: MessageCircle }
+      ],
+      loading: false,
+      error: null,
+      enabled: settingsData.saas.coreoracle?.enabled !== false
     }
   ]
 
@@ -363,6 +389,10 @@ export function Dashboard() {
   
   if (selectedApp === 'pulse') {
     return <CorePulse onBack={() => setSelectedApp(null)} />
+  }
+
+  if (selectedApp === 'oracle') {
+    return <CoreOracle onBack={() => setSelectedApp(null)} />
   }
 
   if (selectedApp === 'payments') {
