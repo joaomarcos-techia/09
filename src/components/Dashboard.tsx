@@ -23,7 +23,6 @@ import {
   Zap,
   RefreshCw,
   AlertCircle,
-  Home,
   Crown,
   User,
   Gift,
@@ -291,11 +290,6 @@ export function Dashboard() {
     setSelectedApp(appId)
   }
 
-  const handleBackToLanding = () => {
-    window.history.pushState({}, '', '/')
-    window.location.reload()
-  }
-
   const handleSignOut = async () => {
     if (confirm('Tem certeza que deseja sair da sua conta?')) {
       await signOut()
@@ -399,15 +393,6 @@ export function Dashboard() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button 
-                onClick={handleBackToLanding}
-                className="flex items-center text-gray-500 hover:text-gray-700 px-3 py-2 rounded-xl hover:shadow-neumorphism-inset transition-all duration-300"
-                title="Voltar à página inicial"
-              >
-                <Home size={20} className="mr-2" />
-                <span className="hidden sm:inline">Página Inicial</span>
-              </button>
-              
               <button 
                 onClick={handleRefreshData}
                 className={`text-gray-500 hover:text-gray-700 p-2 rounded-xl hover:shadow-neumorphism-inset transition-all duration-300 ${refreshing ? 'animate-spin' : ''}`}
